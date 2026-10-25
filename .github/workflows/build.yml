@@ -17,6 +17,7 @@ jobs:
       - name: Create project files
         run: |
           mkdir -p src/main/java/com/example/anglelevel
+          mkdir -p src/main/res/drawable src/main/res/mipmap-anydpi src/main/res/mipmap-anydpi-v26
           cat > settings.gradle.kts <<'END'
           pluginManagement {
               repositories { google(); mavenCentral(); gradlePluginPortal() }
@@ -40,8 +41,8 @@ jobs:
                   applicationId = "com.example.anglelevel"
                   minSdk = 24
                   targetSdk = 34
-                  versionCode = 1
-                  versionName = "1.0"
+                  versionCode = 2
+                  versionName = "1.1"
               }
               compileOptions {
                   sourceCompatibility = JavaVersion.VERSION_17
@@ -55,6 +56,8 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <application
                   android:label="Рівень"
+                  android:icon="@mipmap/ic_launcher"
+                  android:roundIcon="@mipmap/ic_launcher"
                   android:theme="@android:style/Theme.Material.NoActionBar">
                   <activity
                       android:name=".MainActivity"
@@ -67,6 +70,36 @@ jobs:
                   </activity>
               </application>
           </manifest>
+          END
+          cat > src/main/res/drawable/ic_launcher_background.xml <<'END'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#2B2B2B" android:pathData="M0,0h108v108h-108z" />
+          </vector>
+          END
+          cat > src/main/res/drawable/ic_launcher_foreground.xml <<'END'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <group android:pivotX="54" android:pivotY="54" android:rotation="-12">
+                  <path android:fillColor="#FF3D00" android:pathData="M24,52.5h60v3h-60z" />
+              </group>
+              <path android:strokeColor="#FFFFFF" android:strokeWidth="2.5"
+                  android:pathData="M65,32a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+          </vector>
+          END
+          cat > src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'END'
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_launcher_background" />
+              <foreground android:drawable="@drawable/ic_launcher_foreground" />
+          </adaptive-icon>
+          END
+          cat > src/main/res/mipmap-anydpi/ic_launcher.xml <<'END'
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="@drawable/ic_launcher_background" />
+              <item android:drawable="@drawable/ic_launcher_foreground" />
+          </layer-list>
           END
           cat > src/main/java/com/example/anglelevel/MainActivity.kt <<'END'
           package com.example.anglelevel
@@ -93,6 +126,7 @@ jobs:
               private lateinit var view: LevelView
               private var ax = 0f
               private var ay = 0f
+              private var shown: Float? = null
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
@@ -115,23 +149,29 @@ jobs:
               }
 
               override fun onSensorChanged(e: SensorEvent) {
-                  val a = 0.15f
-                  ax += a * (e.values[0] - ax)
-                  ay += a * (e.values[1] - ay)
+                  val k = 0.06f
+                  ax += k * (e.values[0] - ax)
+                  ay += k * (e.values[1] - ay)
                   if (hypot(ax, ay) < 3f) {
-                      view.update(null)
+                      shown = null
+                      view.update(null, null)
                       return
                   }
                   val theta = Math.toDegrees(atan2(ax.toDouble(), ay.toDouble()))
-                  val dev = theta - (theta / 90.0).roundToInt() * 90.0
-                  view.update(dev.toFloat())
+                  val dev = (theta - (theta / 90.0).roundToInt() * 90.0).toFloat()
+                  val s = shown
+                  if (s == null || abs(dev - s) >= 0.15f) {
+                      shown = (dev * 10).roundToInt() / 10f
+                  }
+                  view.update(theta.toFloat(), shown)
               }
 
               override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
           }
 
           class LevelView(context: Context) : View(context) {
-              private var angle: Float? = null
+              private var lineAngle: Float? = null
+              private var shown: Float? = null
 
               private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                   strokeWidth = 4f
@@ -144,15 +184,17 @@ jobs:
 
               init { setBackgroundColor(Color.rgb(43, 43, 43)) }
 
-              fun update(a: Float?) {
-                  angle = a
+              fun update(line: Float?, value: Float?) {
+                  lineAngle = line
+                  shown = value
                   invalidate()
               }
 
               override fun onDraw(canvas: Canvas) {
                   val w = width.toFloat()
                   val h = height.toFloat()
-                  val a = angle
+                  val a = lineAngle
+                  val v = shown
                   linePaint.color = if (a == null) Color.rgb(100, 100, 100) else Color.rgb(255, 61, 0)
 
                   canvas.save()
@@ -161,8 +203,8 @@ jobs:
                   canvas.drawLine(w / 2 - half, h / 2, w / 2 + half, h / 2, linePaint)
                   canvas.restore()
 
-                  textPaint.color = if (a != null && abs(a) < 0.5f) Color.rgb(255, 61, 0) else Color.WHITE
-                  val text = if (a == null) "—" else String.format("%.1f°", abs(a))
+                  textPaint.color = if (v != null && abs(v) < 0.5f) Color.rgb(255, 61, 0) else Color.WHITE
+                  val text = if (v == null) "—" else String.format("%.1f°", abs(v))
                   canvas.drawText(text, w / 2, h / 2 - 120f, textPaint)
               }
           }
