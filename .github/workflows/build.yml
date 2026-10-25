@@ -1,0 +1,175 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Create project files
+        run: |
+          mkdir -p src/main/java/com/example/anglelevel
+          cat > settings.gradle.kts <<'END'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+              plugins {
+                  id("com.android.application") version "8.5.2"
+                  id("org.jetbrains.kotlin.android") version "1.9.24"
+              }
+          }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = "Level"
+          END
+          cat > build.gradle.kts <<'END'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.example.anglelevel"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.example.anglelevel"
+                  minSdk = 24
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions { jvmTarget = "17" }
+          }
+          END
+          cat > src/main/AndroidManifest.xml <<'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:label="Рівень"
+                  android:theme="@android:style/Theme.Material.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="portrait">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          END
+          cat > src/main/java/com/example/anglelevel/MainActivity.kt <<'END'
+          package com.example.anglelevel
+
+          import android.app.Activity
+          import android.content.Context
+          import android.graphics.Canvas
+          import android.graphics.Color
+          import android.graphics.Paint
+          import android.hardware.Sensor
+          import android.hardware.SensorEvent
+          import android.hardware.SensorEventListener
+          import android.hardware.SensorManager
+          import android.os.Bundle
+          import android.view.View
+          import android.view.WindowManager
+          import kotlin.math.abs
+          import kotlin.math.atan2
+          import kotlin.math.hypot
+          import kotlin.math.roundToInt
+
+          class MainActivity : Activity(), SensorEventListener {
+              private lateinit var sm: SensorManager
+              private lateinit var view: LevelView
+              private var ax = 0f
+              private var ay = 0f
+
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                  sm = getSystemService(SENSOR_SERVICE) as SensorManager
+                  view = LevelView(this)
+                  setContentView(view)
+              }
+
+              override fun onResume() {
+                  super.onResume()
+                  sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)?.let {
+                      sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+                  }
+              }
+
+              override fun onPause() {
+                  super.onPause()
+                  sm.unregisterListener(this)
+              }
+
+              override fun onSensorChanged(e: SensorEvent) {
+                  val a = 0.15f
+                  ax += a * (e.values[0] - ax)
+                  ay += a * (e.values[1] - ay)
+                  if (hypot(ax, ay) < 3f) {
+                      view.update(null)
+                      return
+                  }
+                  val theta = Math.toDegrees(atan2(ax.toDouble(), ay.toDouble()))
+                  val dev = theta - (theta / 90.0).roundToInt() * 90.0
+                  view.update(dev.toFloat())
+              }
+
+              override fun onAccuracyChanged(s: Sensor?, accuracy: Int) {}
+          }
+
+          class LevelView(context: Context) : View(context) {
+              private var angle: Float? = null
+
+              private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                  strokeWidth = 4f
+                  strokeCap = Paint.Cap.ROUND
+              }
+              private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                  textAlign = Paint.Align.CENTER
+                  textSize = 140f
+              }
+
+              init { setBackgroundColor(Color.rgb(43, 43, 43)) }
+
+              fun update(a: Float?) {
+                  angle = a
+                  invalidate()
+              }
+
+              override fun onDraw(canvas: Canvas) {
+                  val w = width.toFloat()
+                  val h = height.toFloat()
+                  val a = angle
+                  linePaint.color = if (a == null) Color.rgb(100, 100, 100) else Color.rgb(255, 61, 0)
+
+                  canvas.save()
+                  canvas.rotate(a ?: 0f, w / 2, h / 2)
+                  val half = hypot(w, h)
+                  canvas.drawLine(w / 2 - half, h / 2, w / 2 + half, h / 2, linePaint)
+                  canvas.restore()
+
+                  textPaint.color = if (a != null && abs(a) < 0.5f) Color.rgb(255, 61, 0) else Color.WHITE
+                  val text = if (a == null) "—" else String.format("%.1f°", abs(a))
+                  canvas.drawText(text, w / 2, h / 2 - 120f, textPaint)
+              }
+          }
+          END
+      - name: Build
+        run: gradle assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Level-apk
+          path: build/outputs/apk/debug/app-debug.apk
