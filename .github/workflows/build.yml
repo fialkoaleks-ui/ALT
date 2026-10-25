@@ -205,7 +205,11 @@ jobs:
 
                   textPaint.color = if (v != null && abs(v) < 0.5f) Color.rgb(255, 61, 0) else Color.WHITE
                   val text = if (v == null) "—" else String.format("%.1f°", abs(v))
+                  val base = if (a == null) 0f else (a / 90f).roundToInt() * 90f
+                  canvas.save()
+                  canvas.rotate(base, w / 2, h / 2)
                   canvas.drawText(text, w / 2, h / 2 - 120f, textPaint)
+                  canvas.restore()
               }
           }
           END
