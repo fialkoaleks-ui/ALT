@@ -82,7 +82,7 @@ jobs:
           <vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp" android:height="108dp"
               android:viewportWidth="108" android:viewportHeight="108">
-                            <group android:pivotX="54" android:pivotY="54" android:rotation="22">
+              <group android:pivotX="54" android:pivotY="54" android:rotation="22">
                   <path android:strokeColor="#FFFFFF" android:strokeWidth="2.5"
                       android:pathData="M46,26h16a6,6 0 0 1 6,6v44a6,6 0 0 1 -6,6h-16a6,6 0 0 1 -6,-6v-44a6,6 0 0 1 6,-6z" />
               </group>
@@ -104,6 +104,7 @@ jobs:
           cat > src/main/java/com/example/anglelevel/MainActivity.kt <<'END'
           package com.example.anglelevel
 
+          import android.animation.ValueAnimator
           import android.app.Activity
           import android.content.Context
           import android.graphics.Canvas
@@ -160,7 +161,9 @@ jobs:
                   val theta = Math.toDegrees(atan2(ax.toDouble(), ay.toDouble()))
                   val dev = (theta - (theta / 90.0).roundToInt() * 90.0).toFloat()
                   val s = shown
-                  if (s == null || abs(dev - s) >= 0.15f) {
+                  if (abs(dev) < 0.1f) {
+                      shown = 0f
+                  } else if (s == null || abs(dev - s) >= 0.15f) {
                       shown = (dev * 10).roundToInt() / 10f
                   }
                   view.update(theta.toFloat(), shown)
@@ -172,14 +175,15 @@ jobs:
           class LevelView(context: Context) : View(context) {
               private var lineAngle: Float? = null
               private var shown: Float? = null
+              private var pulse = 0f
+              private var wasLevel = false
 
               private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                  strokeWidth = 4f
                   strokeCap = Paint.Cap.ROUND
               }
               private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                   textAlign = Paint.Align.CENTER
-                  textSize = 160f
+                  textSize = 190f
               }
 
               init { setBackgroundColor(Color.rgb(43, 43, 43)) }
@@ -187,30 +191,43 @@ jobs:
               fun update(line: Float?, value: Float?) {
                   lineAngle = line
                   shown = value
+                  val level = value != null && value == 0f
+                  if (level && !wasLevel) {
+                      val an = ValueAnimator.ofFloat(0f, 1f, 0f)
+                      an.duration = 400
+                      an.addUpdateListener {
+                          pulse = it.animatedValue as Float
+                          invalidate()
+                      }
+                      an.start()
+                  }
+                  wasLevel = level
                   invalidate()
               }
 
-                           override fun onDraw(canvas: Canvas) {
+              override fun onDraw(canvas: Canvas) {
                   val w = width.toFloat()
                   val h = height.toFloat()
                   val a = lineAngle
                   val v = shown
                   val c = if (a == null) Color.rgb(100, 100, 100) else Color.rgb(255, 61, 0)
                   linePaint.color = c
+                  linePaint.strokeWidth = 4f + 6f * pulse
                   textPaint.color = c
                   canvas.save()
                   canvas.rotate(a ?: 0f, w / 2, h / 2)
                   val half = hypot(w, h)
                   canvas.drawLine(w / 2 - half, h / 2, w / 2 + half, h / 2, linePaint)
                   canvas.restore()
-                  var r = a ?: 0f
-                  if (r > 90f) r -= 180f
-                  if (r < -90f) r += 180f
-                  val text = if (v == null) "—" else String.format("%.1f°", v)
-                  canvas.save()
-                  canvas.rotate(r, w / 2, h / 2)
-                  canvas.drawText(text, w / 2, h / 2 - 40f, textPaint)
-                  canvas.restore()
+                  if (a != null && v != null) {
+                      val text = String.format("%.1f°", v)
+                      val sc = 1f + 0.15f * pulse
+                      canvas.save()
+                      canvas.rotate(a, w / 2, h / 2)
+                      canvas.scale(sc, sc, w / 2, h / 2 - 100f)
+                      canvas.drawText(text, w / 2, h / 2 - 40f, textPaint)
+                      canvas.restore()
+                  }
               }
           }
           END
