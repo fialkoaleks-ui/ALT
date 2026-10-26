@@ -179,7 +179,7 @@ jobs:
               }
               private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                   textAlign = Paint.Align.CENTER
-                  textSize = 140f
+                  textSize = 160f
               }
 
               init { setBackgroundColor(Color.rgb(43, 43, 43)) }
@@ -190,25 +190,26 @@ jobs:
                   invalidate()
               }
 
-              override fun onDraw(canvas: Canvas) {
+                           override fun onDraw(canvas: Canvas) {
                   val w = width.toFloat()
                   val h = height.toFloat()
                   val a = lineAngle
                   val v = shown
-                  linePaint.color = if (a == null) Color.rgb(100, 100, 100) else Color.rgb(255, 61, 0)
-
+                  val c = if (a == null) Color.rgb(100, 100, 100) else Color.rgb(255, 61, 0)
+                  linePaint.color = c
+                  textPaint.color = c
                   canvas.save()
                   canvas.rotate(a ?: 0f, w / 2, h / 2)
                   val half = hypot(w, h)
                   canvas.drawLine(w / 2 - half, h / 2, w / 2 + half, h / 2, linePaint)
                   canvas.restore()
-
-                  textPaint.color = if (v != null && abs(v) < 0.5f) Color.rgb(255, 61, 0) else Color.WHITE
-                  val text = if (v == null) "—" else String.format("%.1f°", abs(v))
-                  val base = if (a == null) 0f else (a / 90f).roundToInt() * 90f
+                  var r = a ?: 0f
+                  if (r > 90f) r -= 180f
+                  if (r < -90f) r += 180f
+                  val text = if (v == null) "—" else String.format("%.1f°", v)
                   canvas.save()
-                  canvas.rotate(base, w / 2, h / 2)
-                  canvas.drawText(text, w / 2, h / 2 - 120f, textPaint)
+                  canvas.rotate(r, w / 2, h / 2)
+                  canvas.drawText(text, w / 2, h / 2 - 40f, textPaint)
                   canvas.restore()
               }
           }
